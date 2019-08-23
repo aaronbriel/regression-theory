@@ -1,0 +1,154 @@
+---
+title: 'Regression Theory'
+author: "Aaron Briel"
+date: "7/9/2018"
+output: pdf_document
+header-includes: 
+  \DeclareMathOperator*{\argmin}{\arg\!min}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1. Data Preprocessing
+
+Printing the dimensions of each partition to verify the number of samples:
+
+```{r echo=FALSE}
+# Reading mnist_train.csv and mnist_test.csv separately.
+data_dir <- "mnist"
+train_data <- read.csv(paste(data_dir, "mnist_train.csv", sep="/"), header=FALSE)
+test_data <- read.csv(paste(data_dir, "mnist_test.csv", sep="/"), header=FALSE)
+
+# Partitioning the training and test sets for classification of 0, 1 and 3, 5 classes
+train_data_0_1 <- cbind(train_data[, unlist(train_data[785,]) == 0],
+                        train_data[, unlist(train_data[785,]) == 1])
+train_data_3_5 <- cbind(train_data[, unlist(train_data[785,]) == 3],
+                        train_data[, unlist(train_data[785,]) == 5])
+test_data_0_1 <- cbind(test_data[, unlist(test_data[785,]) == 0],
+                       test_data[, unlist(test_data[785,]) == 1])
+test_data_3_5 <- cbind(test_data[, unlist(test_data[785,]) == 3],
+                       test_data[, unlist(test_data[785,]) == 5])
+
+# Printing the dimensions of each partition to check sample count
+dim(train_data_0_1)
+dim(train_data_3_5)
+dim(test_data_0_1)
+dim(test_data_3_5)
+
+# Separating the true class label from all the partitions created
+train_labels_0_1 <- train_data_0_1[785,]
+train_labels_3_5 <- train_data_3_5[785,]
+test_labels_0_1 <- test_data_0_1[785,]
+test_labels_3_5 <- test_data_3_5[785,]
+
+# Removing labels (row 785) from the actual image data
+train_data_0_1 <- train_data_0_1[-c(785),]
+train_data_3_5 <- train_data_3_5[-c(785),]
+test_data_0_1 <- test_data_0_1[-c(785),]
+test_data_3_5 <- test_data_3_5[-c(785),]
+
+# Accepts single image sample and class and creates a matrix from said 
+# sample vector with matching columns/rows, then rotates it 90 degrees 
+# in image creation (Reference 1)
+visualize <- function(image_data, class) {
+  mat <- matrix(image_data, 
+                ncol=sqrt(length(image_data)), 
+                nrow=sqrt(length(image_data)))
+  
+  image(t(apply(mat, 2, rev)), col=gray(0:255/255))
+  title(main=paste0("Class: ", class))
+}
+
+```
+Visualizing an image from each class to ensure that the data was processed correctly.  
+  
+```{r echo=FALSE}
+visualize(train_data_0_1[,1], 0)
+```
+  
+```{r echo=FALSE}
+visualize(test_data_0_1[,ncol(test_data_0_1)], 1)
+```
+  
+```{r echo=FALSE}
+visualize(train_data_3_5[,1], 3)
+```
+  
+```{r echo=FALSE}
+visualize(test_data_3_5[,ncol(test_data_3_5)], 5)
+```
+
+## 2. Theory
+
+a. The formula for the loss function used in Logistic Regression which we wish to minimize is as follows, where we are assuming that $y^{(i)} \in \{-1, +1\}$:
+
+$$
+L(\theta) = \argmin_{\theta} \sum_{n=i}^{n} log \left( 1 + \exp ( -y^{(i)} \langle \theta, x^{(i)} \rangle ) \right)
+$$
+b. The gradient of the loss function with respect to the model pararameters is derived in the following steps, with the assumption that $log$ is the natural logarithm.
+
+$$
+\frac {\partial L(\theta)} {\partial \theta_{j}} = \frac {1} {1 + \exp ( -y^{(i)} \langle \theta, x^{(i)} \rangle )} \cdot \frac {\partial (1 + \exp ( -y^{(i)} \langle \theta, x^{(i)} \rangle)} {\partial \theta_{j}}
+$$
+$$
+= \frac {\exp ( -y^{(i)} \langle \theta, x^{(i)} \rangle )} {1 + \exp ( -y^{(i)} \langle \theta, x^{(i)} \rangle )} \cdot \Big( -y^{(i)} \cdot  \frac {\partial ( \langle \theta, x^{(i)} \rangle )} {\partial \theta_{j}} \Big)
+$$
+$$
+= -\frac {y^{(i)}} {1 + \exp ( y^{(i)} \langle \theta, x^{(i)} \rangle )} \cdot \Big( \frac {\partial ( \langle \theta, x^{(i)} \rangle )} {\partial \theta_{j}} \Big)
+$$
+$$
+\frac {\partial ( \langle \theta, x^{(i)} \rangle )} {\partial \theta_{j}} = \frac {\partial (\theta_1 x_1^{(i)} + \theta_2 x_2^{(i)} + ... + \theta_j x_j^{(i)} ... + \theta_n x_n^{(i)})} {\partial \theta_{j}}
+$$
+$$
+= (0 + 0 + ... + \frac {\theta_j x_j^{(i)}} {\partial \theta_j} + ... + 0)
+$$
+$$
+= x_j^{(i)}
+$$
+$$
+\frac {\partial L(\theta)} {\partial \theta_{j}} = - \frac {y^{(i)} x_j^{(i)} } {1 + \exp ( y^{(i)} \langle \theta, x^{(i)} \rangle )}
+$$
+
+c. Based on the gradient in (b), we express the Stochastic Gradient Descent (SGD) update rule that uses a single sample at a time as follows:
+$$
+\theta_j \leftarrow \theta_j + \alpha \Big( \frac {y^{(i)} x_j^{(i)} } {1 + \exp ( y^{(i)} \langle \theta, x^{(i)} \rangle )} \Big)
+$$
+
+d. Pseudocode for training a model using Logistic Regression and SGD is below, where "alpha"" is the step size or learning rate, and "n" is the number of samples.
+```{r, eval=FALSE}
+alpha = sufficiently small value
+theta = array of length n with random values between 0 and 1
+theta_old = a large integer repeated n times
+theta_current = a small integer repeated n times
+
+do until no value in absolute_value(theta_current – theta_old) < threshold:
+  sample_column = array of integers sampled without replacement between 1 and n
+  theta_old = theta
+  for i = 1 to n
+    index = sample_column[i]
+    theta = theta + alpha * (y(index)*x(index) / 
+      (1 + exp(y(index) * dot_product(theta, x(index)))))
+  end
+  theta_current = theta
+end
+
+return theta
+```
+
+e. The number of operations per epoch of SGD, where number of samples is $n$ and the dimensionality of each sample is $d$, can be expressed in Big-O notation as follows: $O(n*d)$
+
+##References:  
+
+**1. Citation for image creation from matrix:**  
+Author "biomickwatson". (2016, October 6). Retrieved from  
+https://www.r-bloggers.com/creating-an-image-of-a-matrix-in-r-using-image/
+
+**2. Citation for the source of various RMD math notations:***
+Author R. Prium. (2016, October 16). Retrieved from: 
+https://www.calvin.edu/~rpruim/courses/s341/S17/from-class/MathinRmd.html
+
+**3. Citation for RMD argmin math notation:***
+Answer from user "egreg". (2015, December 20). Retrieved from:
+https://tex.stackexchange.com/questions/5223/command-for-argmin-or-argmax/5255
